@@ -1,7 +1,11 @@
-package ttt_backend;
+package ttt_backend.entities;
 
 import java.util.HashMap;
 import java.util.Optional;
+
+import ttt_backend.exceptions.CannotStartGameException;
+import ttt_backend.exceptions.InvalidJoinException;
+import ttt_backend.exceptions.InvalidMoveException;
 
 /**
  * 

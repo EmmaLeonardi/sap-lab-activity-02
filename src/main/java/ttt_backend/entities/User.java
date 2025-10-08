@@ -1,4 +1,4 @@
-package ttt_backend;
+package ttt_backend.entities;
 
 /**
  * 
