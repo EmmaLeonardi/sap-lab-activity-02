@@ -13,6 +13,9 @@ import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.*;
 import io.vertx.ext.web.*;
 import io.vertx.ext.web.handler.StaticHandler;
+import ttt_backend.entities.Game;
+import ttt_backend.entities.User;
+
 import java.io.*;
 
 /**
@@ -29,27 +32,23 @@ public class TTTBackend extends VerticleBase {
 	static Logger logger = Logger.getLogger("[TicTacToe Backend]");
 	
 	//static final String TTT_CHANNEL = "ttt-events";
-
-	/* list of registered users */
-	private HashMap<String, User> users;
 	
 	/* list on ongoing games*/ 
 	private HashMap<String, Game> games;
 
 	/* counters to create ids */
-	private int usersIdCount;
+	
 	private int gamesIdCount;
-
-	/* db file */
-	static final String DB_USERS = "users.json";
 	
 	/* port of the endpoint */
 	private int port;
+
+	final private UserRepoInterface repo;
 	
-	
-	public TTTBackend(int port) {
+	public TTTBackend(int port, UserRepoInterface repo) {
 		this.port = port;
 		logger.setLevel(Level.INFO);
+		this.repo=repo;
 	}
 
 	public Future<?> start() {
@@ -57,13 +56,12 @@ public class TTTBackend extends VerticleBase {
 		HttpServer server = vertx.createHttpServer();
 
 		gamesIdCount = 0;
-		usersIdCount = 0;
 		
-		users = new HashMap<>();
 		games = new HashMap<>();
 		
 		/* configuring API routes */
 		
+		//Websocket->Java
 		Router router = Router.router(vertx);
 		router.route(HttpMethod.POST, "/api/registerUser").handler(this::registerUser);
 		router.route(HttpMethod.POST, "/api/createGame").handler(this::createNewGame);
@@ -72,15 +70,11 @@ public class TTTBackend extends VerticleBase {
 		
 		/* configuring websocket handler */
 		
-		handleEventSubscription(server, "/api/events");
+		handleEventSubscription(server, "/api/events"); //Java->WebSocket
 
 		/* enabling access to static files (web app page) */
 		
 		router.route("/public/*").handler(StaticHandler.create());
-
-		/* restore from the DB */
-		
-		initFromDB();
 				
 		/* start the server */
 		
@@ -106,22 +100,17 @@ public class TTTBackend extends VerticleBase {
 	 */
 	protected void registerUser(RoutingContext context) {
 		logger.log(Level.INFO, "RegisterUser request");
-		usersIdCount++;		
+			
 		context.request().handler(buf -> {
 
 			/* add the new user */
 			JsonObject userInfo = buf.toJsonObject();
 			var userName = userInfo.getString("userName");
-			var newUserId = "user-"+usersIdCount;
-			var user = new User(newUserId, userName);
-			users.put(newUserId, user);
-			
-			/* save on DB */
-			saveOnDB();
+			var user=this.repo.addUser(userName);
 			
 			var reply = new JsonObject();
-			reply.put("userId", newUserId);
-			reply.put("userName", userName);		
+			reply.put("userId", user.id());
+			reply.put("userName", user.name());		
 			try {
 				sendReply(context.response(), reply);
 			} catch (Exception ex) {
@@ -165,7 +154,7 @@ public class TTTBackend extends VerticleBase {
 			String gameId = joinInfo.getString("gameId");
 			String symbol = joinInfo.getString("symbol");
 			var gameSym = symbol.equals("cross") ? Game.GameSymbolType.CROSS : Game.GameSymbolType.CIRCLE;		
-			var user = users.get(userId);
+			var user = this.repo.getUserById(userId);
 			var game = games.get(gameId);
 			
 			var reply = new JsonObject();
@@ -212,7 +201,7 @@ public class TTTBackend extends VerticleBase {
 				int y = Integer.parseInt(moveInfo.getString("y"));
 		
 				var gameSym = symbol.equals("cross") ? Game.GameSymbolType.CROSS : Game.GameSymbolType.CIRCLE;		
-				var user = users.get(userId);
+				var user = this.repo.getUserById(userId);
 				var game = games.get(gameId);				
 
 				game.makeAmove(user, gameSym, x, y);						
@@ -331,49 +320,6 @@ public class TTTBackend extends VerticleBase {
 			});
 		});
 	}
-	
-	/* DB management */
-	
-	private void initFromDB() {
-		try {
-			var usersDB = new BufferedReader(new FileReader(DB_USERS));
-			var sb = new StringBuffer();
-			while (usersDB.ready()) {
-				sb.append(usersDB.readLine()+"\n");
-			}
-			usersDB.close();
-			var array = new JsonArray(sb.toString());
-			for (int i = 0; i < array.size(); i++) {
-				var user = array.getJsonObject(i);
-				var key = user.getString("userId");
-				users.put(key, new User(key, user.getString("userName")));
-				usersIdCount++;
-			}
-			
-		} catch (Exception ex) {
-			// ex.printStackTrace();
-			logger.info("No dbase, creating a new one");
-			saveOnDB();
-		}
-	}
-	
-	private void saveOnDB() {
-		try {
-			JsonArray list = new JsonArray();
-			for (User u: users.values()) {
-				var obj = new JsonObject();
-				obj.put("userId", u.id());
-				obj.put("userName", u.name());
-				list.add(obj);
-			}
-			var usersDB = new FileWriter(DB_USERS);
-			usersDB.append(list.encodePrettily());
-			usersDB.flush();
-			usersDB.close();
-		} catch (Exception ex) {
-			ex.printStackTrace();
-		}	
-	}
 
 	/**
 	 * 
@@ -410,7 +356,7 @@ public class TTTBackend extends VerticleBase {
 	 */
 	public static void main(String[] args) {
 		var vertx = Vertx.vertx();
-		var server = new TTTBackend(BACKEND_PORT);
+		var server = new TTTBackend(BACKEND_PORT, new JsonDAO());
 		vertx.deployVerticle(server);	
 	}	
 	
