@@ -15,4 +15,5 @@ v1.0.0-20251001
     - refactor the backend applying a Clean/Hexagonal Architectural style
     - refine the API in order to follow a RESTful architecture 
   
-
+ ## Hexagonal Architecture diagram
+ ![Hexagonal Architecture diagram](https://github.com/EmmaLeonardi/sap-lab-activity-02/blob/main/HexArchitecture.png?raw=true)
