@@ -16,7 +16,6 @@ import ttt_backend.exceptions.InvalidMoveException;
  *
  * Back end with some clean (software) architecture
  * 
- * @author emma.leonardi2
  *
  */
 public class TTTBackend implements CommandsInterface {
