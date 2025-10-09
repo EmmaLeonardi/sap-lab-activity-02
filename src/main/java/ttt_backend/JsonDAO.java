@@ -12,25 +12,25 @@ import java.util.logging.Logger;
 
 public class JsonDAO implements UserRepoInterface {
 
-    /* db file */
-    static final String DB_USERS = "users.json";
-    private int usersIdCount;
-    /* list of registered users */
-    private HashMap<String, User> users;
-    private static Logger logger = Logger.getLogger("[JsonDAO]");
+	/* db file */
+	static final String DB_USERS = "users.json";
+	private int usersIdCount;
+	/* list of registered users */
+	private final HashMap<String, User> users;
+	private static final Logger logger = Logger.getLogger("[JsonDAO]");
 
-    public JsonDAO() {
-        this.usersIdCount = 0;
-        this.users = new HashMap<>();
-        initFromDB();
-    }
+	public JsonDAO() {
+		this.usersIdCount = 0;
+		this.users = new HashMap<>();
+		this.initFromDB();
+	}
 
-    private void initFromDB() {
+	private void initFromDB() {
 		try {
 			var usersDB = new BufferedReader(new FileReader(DB_USERS));
 			var sb = new StringBuffer();
 			while (usersDB.ready()) {
-				sb.append(usersDB.readLine()+"\n");
+				sb.append(usersDB.readLine() + "\n");
 			}
 			usersDB.close();
 			var array = new JsonArray(sb.toString());
@@ -38,20 +38,19 @@ public class JsonDAO implements UserRepoInterface {
 				var user = array.getJsonObject(i);
 				var key = user.getString("userId");
 				this.users.put(key, new User(key, user.getString("userName")));
-				usersIdCount++;
+				this.usersIdCount++;
 			}
-			
-		} catch (Exception ex) {
-			// ex.printStackTrace();
+
+		} catch (final Exception ex) {
 			logger.info("No dbase, creating a new one");
-			saveOnDB();
+			this.saveOnDB();
 		}
 	}
-	
+
 	private void saveOnDB() {
 		try {
 			JsonArray list = new JsonArray();
-			for (User u: users.values()) {
+			for (User u : users.values()) {
 				var obj = new JsonObject();
 				obj.put("userId", u.id());
 				obj.put("userName", u.name());
@@ -61,24 +60,24 @@ public class JsonDAO implements UserRepoInterface {
 			usersDB.append(list.encodePrettily());
 			usersDB.flush();
 			usersDB.close();
-		} catch (Exception ex) {
+		} catch (final Exception ex) {
 			ex.printStackTrace();
-		}	
+		}
 	}
 
-    @Override
-    public User addUser(String username) {
-        var newUserId = "user-"+usersIdCount;
+	@Override
+	public User addUser(final String username) {
+		var newUserId = "user-" + usersIdCount;
 		var user = new User(newUserId, username);
-		users.put(newUserId, user);
-		saveOnDB();
-        usersIdCount++;
-        return user;
-    }
+		this.users.put(newUserId, user);
+		this.saveOnDB();
+		this.usersIdCount++;
+		return user;
+	}
 
-    @Override
-    public User getUserById(String id) {
-        return this.users.get(id);
-    }
+	@Override
+	public User getUserById(final String id) {
+		return this.users.get(id);
+	}
 
 }

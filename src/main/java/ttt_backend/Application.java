@@ -5,15 +5,15 @@ import io.vertx.core.VerticleBase;
 import io.vertx.core.Vertx;
 
 public class Application extends VerticleBase {
-    public static final int HTTP_PORT = 8080;
+	public static final int HTTP_PORT = 8080;
 
-    public Future<?> start(){
-        var server = vertx.createHttpServer();
+	public Future<?> start() {
+		var server = vertx.createHttpServer();
 		var backend = new TTTBackend(vertx, new JsonDAO());
-        var restCommands= new RestCommands(vertx, backend, server, HTTP_PORT);
+		var restCommands = new RestCommands(vertx, backend, server, HTTP_PORT);
 		var webSocketAcceptor = new WebSocketAcceptor(server, backend);
-        return restCommands.start();
-		}
+		return restCommands.start();
+	}
 
 	/**
 	 * 
@@ -23,7 +23,7 @@ public class Application extends VerticleBase {
 	 */
 	public static void main(String[] args) {
 		var vertx = Vertx.vertx();
-        vertx.deployVerticle(new Application());
+		vertx.deployVerticle(new Application());
 	}
-    
+
 }

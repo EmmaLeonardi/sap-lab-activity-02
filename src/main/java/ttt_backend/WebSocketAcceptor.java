@@ -10,7 +10,7 @@ public class WebSocketAcceptor {
 
     private static Logger logger = Logger.getLogger("[WebSocketAcceptor]");
 
-    public WebSocketAcceptor(HttpServer server, TTTBackend backend){
+    public WebSocketAcceptor(final HttpServer server, final TTTBackend backend) {
         server.webSocketHandler(webSocket -> {
             logger.log(Level.INFO, "New TTT subscription accepted.");
 
@@ -29,5 +29,5 @@ public class WebSocketAcceptor {
         });
 
     }
-    
+
 }

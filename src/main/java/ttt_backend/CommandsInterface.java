@@ -14,5 +14,6 @@ public interface CommandsInterface {
 
     void joinGame(final String userID, final String gameID, final GameSymbolType symbol) throws InvalidJoinException;
 
-    void makeAMove(final String userID, final String gameID, final int x, final int y, final GameSymbolType symbol) throws InvalidMoveException;
+    void makeAMove(final String userID, final String gameID, final int x, final int y, final GameSymbolType symbol)
+            throws InvalidMoveException;
 }

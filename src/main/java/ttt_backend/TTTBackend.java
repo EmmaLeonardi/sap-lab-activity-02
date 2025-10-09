@@ -14,21 +14,17 @@ import ttt_backend.exceptions.InvalidMoveException;
 
 /**
  *
- * Big raw monolithic back end with no clean (software) architecture
+ * Back end with some clean (software) architecture
  * 
- * It features a reactive/event-loop control architecture, based on Vert.x
- * 
- * @author aricci
+ * @author emma.leonardi2
  *
  */
 public class TTTBackend implements CommandsInterface {
 
-	static Logger logger = Logger.getLogger("[TicTacToe Backend]");
-
-	// static final String TTT_CHANNEL = "ttt-events";
+	private static final Logger logger = Logger.getLogger("[TicTacToe Backend]");
 
 	/* list on ongoing games */
-	private HashMap<String, Game> games;
+	private final HashMap<String, Game> games;
 
 	/* counters to create ids */
 	private int gamesIdCount;
@@ -36,13 +32,13 @@ public class TTTBackend implements CommandsInterface {
 	/* port of the endpoint */
 	private final Vertx vertx;
 
-	final private UserRepoInterface repo;
+	private final UserRepoInterface repo;
 
-	public TTTBackend(Vertx vertx, UserRepoInterface repo) {
+	public TTTBackend(final Vertx vertx, final UserRepoInterface repo) {
 		logger.setLevel(Level.INFO);
 		this.repo = repo;
-		this.vertx=vertx;
-		this.games=new HashMap<>();
+		this.vertx = vertx;
+		this.games = new HashMap<>();
 	}
 
 	/* List of handlers mapping the API */
@@ -53,7 +49,7 @@ public class TTTBackend implements CommandsInterface {
 	 * 
 	 * @param context
 	 */
-	public User registerUser(String username) {
+	public User registerUser(final String username) {
 		return this.repo.addUser(username);
 	}
 
@@ -64,10 +60,10 @@ public class TTTBackend implements CommandsInterface {
 	 * @param context
 	 */
 	public Game createNewGame() {
-		gamesIdCount++;
+		this.gamesIdCount++;
 		var newGameId = "game-" + gamesIdCount;
 		var game = new Game(newGameId);
-		games.put(newGameId, game);
+		this.games.put(newGameId, game);
 		return game;
 	}
 
@@ -77,9 +73,10 @@ public class TTTBackend implements CommandsInterface {
 	 * 
 	 * @param context
 	 */
-	public void joinGame(String userId, String gameId, GameSymbolType gameSymbol) throws InvalidJoinException{
+	public void joinGame(final String userId, final String gameId, final GameSymbolType gameSymbol)
+			throws InvalidJoinException {
 		var user = this.repo.getUserById(userId);
-		var game = games.get(gameId);
+		var game = this.games.get(gameId);
 		game.joinGame(user, gameSymbol);
 	}
 
@@ -90,9 +87,9 @@ public class TTTBackend implements CommandsInterface {
 	 * @param context
 	 */
 	public void makeAMove(final String userID, final String gameID, final int x, final int y,
-			final GameSymbolType symbol) throws InvalidMoveException{
+			final GameSymbolType symbol) throws InvalidMoveException {
 		var user = this.repo.getUserById(userID);
-		var game = games.get(gameID);
+		var game = this.games.get(gameID);
 		game.makeAmove(user, symbol, x, y);
 
 		/* notifying events */
@@ -109,7 +106,7 @@ public class TTTBackend implements CommandsInterface {
 
 		/* the event is notified on the event bus 'address' of the specific game */
 
-		var gameAddress = getBusAddressForAGame(gameID);
+		var gameAddress = this.getBusAddressForAGame(gameID);
 		eb.publish(gameAddress, evMove);
 
 		/* a game-ended event is notified too if the game is ended */
@@ -134,7 +131,7 @@ public class TTTBackend implements CommandsInterface {
 
 	}
 
-	public void subscribeToGameEvents(String gameId, EventListenerInterface listener) {
+	public void subscribeToGameEvents(final String gameId, final EventListenerInterface listener) {
 		EventBus eb = vertx.eventBus();
 
 		var gameAddress = getBusAddressForAGame(gameId);
@@ -151,14 +148,14 @@ public class TTTBackend implements CommandsInterface {
 		 * the game can start
 		 * 
 		 */
-		var game = games.get(gameId);
+		var game = this.games.get(gameId);
 		if (game.bothPlayersJoined()) {
 			try {
 				game.start();
 				var evGameStarted = new JsonObject();
 				evGameStarted.put("event", "game-started");
 				eb.publish(gameAddress, evGameStarted);
-			} catch (Exception ex) {
+			} catch (final Exception ex) {
 				ex.printStackTrace();
 			}
 		}
@@ -172,7 +169,7 @@ public class TTTBackend implements CommandsInterface {
 	 * @param gameId
 	 * @return
 	 */
-	private String getBusAddressForAGame(String gameId) {
+	private String getBusAddressForAGame(final String gameId) {
 		return "ttt-events-" + gameId;
 	}
 
