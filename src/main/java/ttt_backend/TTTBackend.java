@@ -3,17 +3,14 @@ package ttt_backend;
 import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import io.vertx.core.Future;
-import io.vertx.core.VerticleBase;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.EventBus;
-import io.vertx.core.http.HttpMethod;
-import io.vertx.core.http.HttpServer;
-import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.*;
-import io.vertx.ext.web.*;
-import io.vertx.ext.web.handler.StaticHandler;
 import ttt_backend.entities.Game;
+import ttt_backend.entities.User;
+import ttt_backend.entities.Game.GameSymbolType;
+import ttt_backend.exceptions.InvalidJoinException;
+import ttt_backend.exceptions.InvalidMoveException;
 
 /**
  *
@@ -24,7 +21,7 @@ import ttt_backend.entities.Game;
  * @author aricci
  *
  */
-public class TTTBackend extends VerticleBase {
+public class TTTBackend implements CommandsInterface {
 
 	static Logger logger = Logger.getLogger("[TicTacToe Backend]");
 
@@ -37,51 +34,15 @@ public class TTTBackend extends VerticleBase {
 	private int gamesIdCount;
 
 	/* port of the endpoint */
-	private int port;
+	private final Vertx vertx;
 
 	final private UserRepoInterface repo;
-	final private HttpServer server;
 
-	public TTTBackend(int port, UserRepoInterface repo, HttpServer server) {
-		this.port = port;
+	public TTTBackend(Vertx vertx, UserRepoInterface repo) {
 		logger.setLevel(Level.INFO);
 		this.repo = repo;
-		this.server=server;
-	}
-
-	public Future<?> start() {
-		logger.log(Level.INFO, "TTT Server initializing...");
-
-		gamesIdCount = 0;
-
-		games = new HashMap<>();
-
-		/* configuring API routes */
-
-		// Websocket->Java
-		Router router = Router.router(vertx);
-		router.route(HttpMethod.POST, "/api/registerUser").handler(this::registerUser);
-		router.route(HttpMethod.POST, "/api/createGame").handler(this::createNewGame);
-		router.route(HttpMethod.POST, "/api/joinGame").handler(this::joinGame);
-		router.route(HttpMethod.POST, "/api/makeAMove").handler(this::makeAMove);
-
-		/* configuring websocket handler */
-
-		/* enabling access to static files (web app page) */
-
-		router.route("/public/*").handler(StaticHandler.create());
-
-		/* start the server */
-
-		var fut = server
-				.requestHandler(router)
-				.listen(port);
-
-		fut.onSuccess(res -> {
-			logger.log(Level.INFO, "TTT Game Server ready - port: " + port);
-		});
-
-		return fut;
+		this.vertx=vertx;
+		this.games=new HashMap<>();
 	}
 
 	/* List of handlers mapping the API */
@@ -92,25 +53,8 @@ public class TTTBackend extends VerticleBase {
 	 * 
 	 * @param context
 	 */
-	protected void registerUser(RoutingContext context) {
-		logger.log(Level.INFO, "RegisterUser request");
-
-		context.request().handler(buf -> {
-
-			/* add the new user */
-			JsonObject userInfo = buf.toJsonObject();
-			var userName = userInfo.getString("userName");
-			var user = this.repo.addUser(userName);
-
-			var reply = new JsonObject();
-			reply.put("userId", user.id());
-			reply.put("userName", user.name());
-			try {
-				sendReply(context.response(), reply);
-			} catch (Exception ex) {
-				sendError(context.response());
-			}
-		});
+	public User registerUser(String username) {
+		return this.repo.addUser(username);
 	}
 
 	/**
@@ -119,19 +63,12 @@ public class TTTBackend extends VerticleBase {
 	 * 
 	 * @param context
 	 */
-	protected void createNewGame(RoutingContext context) {
-		logger.log(Level.INFO, "CreateNewGame request - " + context.currentRoute().getPath());
+	public Game createNewGame() {
 		gamesIdCount++;
 		var newGameId = "game-" + gamesIdCount;
 		var game = new Game(newGameId);
 		games.put(newGameId, game);
-		var reply = new JsonObject();
-		reply.put("gameId", newGameId);
-		try {
-			sendReply(context.response(), reply);
-		} catch (Exception ex) {
-			sendError(context.response());
-		}
+		return game;
 	}
 
 	/**
@@ -140,38 +77,10 @@ public class TTTBackend extends VerticleBase {
 	 * 
 	 * @param context
 	 */
-	protected void joinGame(RoutingContext context) {
-		logger.log(Level.INFO, "JoinGame request - " + context.currentRoute().getPath());
-		context.request().handler(buf -> {
-			JsonObject joinInfo = buf.toJsonObject();
-			String userId = joinInfo.getString("userId");
-			String gameId = joinInfo.getString("gameId");
-			String symbol = joinInfo.getString("symbol");
-			var gameSym = symbol.equals("cross") ? Game.GameSymbolType.CROSS : Game.GameSymbolType.CIRCLE;
-			var user = this.repo.getUserById(userId);
-			var game = games.get(gameId);
-
-			var reply = new JsonObject();
-			try {
-				game.joinGame(user, gameSym);
-				reply.put("result", "accepted");
-				try {
-					sendReply(context.response(), reply);
-					logger.log(Level.INFO, "Join succeeded");
-				} catch (Exception ex) {
-					sendError(context.response());
-				}
-
-			} catch (Exception ex) {
-				reply.put("result", "denied");
-				try {
-					sendReply(context.response(), reply);
-					logger.log(Level.INFO, "Join failed");
-				} catch (Exception ex2) {
-					sendError(context.response());
-				}
-			}
-		});
+	public void joinGame(String userId, String gameId, GameSymbolType gameSymbol) throws InvalidJoinException{
+		var user = this.repo.getUserById(userId);
+		var game = games.get(gameId);
+		game.joinGame(user, gameSymbol);
 	}
 
 	/**
@@ -180,78 +89,49 @@ public class TTTBackend extends VerticleBase {
 	 * 
 	 * @param context
 	 */
-	protected void makeAMove(RoutingContext context) {
-		logger.log(Level.INFO, "MakeAMove request - " + context.currentRoute().getPath());
-		context.request().handler(buf -> {
-			var reply = new JsonObject();
-			try {
-				JsonObject moveInfo = buf.toJsonObject();
-				logger.log(Level.INFO, "move info: " + moveInfo);
+	public void makeAMove(final String userID, final String gameID, final int x, final int y,
+			final GameSymbolType symbol) throws InvalidMoveException{
+		var user = this.repo.getUserById(userID);
+		var game = games.get(gameID);
+		game.makeAmove(user, symbol, x, y);
 
-				String userId = moveInfo.getString("userId");
-				String gameId = moveInfo.getString("gameId");
-				String symbol = moveInfo.getString("symbol");
-				int x = Integer.parseInt(moveInfo.getString("x"));
-				int y = Integer.parseInt(moveInfo.getString("y"));
+		/* notifying events */
 
-				var gameSym = symbol.equals("cross") ? Game.GameSymbolType.CROSS : Game.GameSymbolType.CIRCLE;
-				var user = this.repo.getUserById(userId);
-				var game = games.get(gameId);
+		var eb = this.vertx.eventBus();
 
-				game.makeAmove(user, gameSym, x, y);
-				reply.put("result", "accepted");
-				try {
-					sendReply(context.response(), reply);
-				} catch (Exception ex) {
-					sendError(context.response());
-				}
+		/* about the new move */
 
-				/* notifying events */
+		var evMove = new JsonObject();
+		evMove.put("event", "new-move");
+		evMove.put("x", x);
+		evMove.put("y", y);
+		evMove.put("symbol", symbol);
 
-				var eb = vertx.eventBus();
+		/* the event is notified on the event bus 'address' of the specific game */
 
-				/* about the new move */
+		var gameAddress = getBusAddressForAGame(gameID);
+		eb.publish(gameAddress, evMove);
 
-				var evMove = new JsonObject();
-				evMove.put("event", "new-move");
-				evMove.put("x", x);
-				evMove.put("y", y);
-				evMove.put("symbol", symbol);
+		/* a game-ended event is notified too if the game is ended */
 
-				/* the event is notified on the event bus 'address' of the specific game */
+		if (game.isGameEnd()) {
 
-				var gameAddress = getBusAddressForAGame(gameId);
-				eb.publish(gameAddress, evMove);
+			var evEnd = new JsonObject();
+			evEnd.put("event", "game-ended");
 
-				/* a game-ended event is notified too if the game is ended */
-
-				if (game.isGameEnd()) {
-
-					var evEnd = new JsonObject();
-					evEnd.put("event", "game-ended");
-
-					if (game.isTie()) {
-						evEnd.put("result", "tie");
-					} else {
-						var sym = game.getWinner().get();
-						if (sym.equals(Game.GameSymbolType.CROSS)) {
-							evEnd.put("winner", "cross");
-						} else {
-							evEnd.put("winner", "circle");
-						}
-					}
-					eb.publish(gameAddress, evEnd);
-				}
-
-			} catch (Exception ex) {
-				reply.put("result", "invalid-move");
-				try {
-					sendReply(context.response(), reply);
-				} catch (Exception ex2) {
-					sendError(context.response());
+			if (game.isTie()) {
+				evEnd.put("result", "tie");
+			} else {
+				var sym = game.getWinner().get();
+				if (sym.equals(Game.GameSymbolType.CROSS)) {
+					evEnd.put("winner", "cross");
+				} else {
+					evEnd.put("winner", "circle");
 				}
 			}
-		});
+			eb.publish(gameAddress, evEnd);
+		}
+
 	}
 
 	public void subscribeToGameEvents(String gameId, EventListenerInterface listener) {
@@ -294,35 +174,6 @@ public class TTTBackend extends VerticleBase {
 	 */
 	private String getBusAddressForAGame(String gameId) {
 		return "ttt-events-" + gameId;
-	}
-
-	/* Aux methods */
-
-	private void sendReply(HttpServerResponse response, JsonObject reply) {
-		response.putHeader("content-type", "application/json");
-		response.end(reply.toString());
-	}
-
-	private void sendError(HttpServerResponse response) {
-		response.setStatusCode(500);
-		response.putHeader("content-type", "application/json");
-		response.end();
-	}
-
-	static final int BACKEND_PORT = 8080;
-
-	/**
-	 * 
-	 * Main method to launch the backend.
-	 * 
-	 * @param args
-	 */
-	public static void main(String[] args) {
-		var vertx = Vertx.vertx();
-		var server = vertx.createHttpServer();
-		var backend = new TTTBackend(BACKEND_PORT, new JsonDAO(), server);
-		var webSocketAcceptor = new WebSocketAcceptor(server, backend);
-		vertx.deployVerticle(backend);
 	}
 
 }
